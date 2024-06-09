@@ -10,6 +10,9 @@ import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple5;
 
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -47,8 +50,20 @@ public final class SparkHDD {
 
     private static void executeQuery1(JavaRDD<Tuple5<String, String, String, Long, Long>> value, SparkSession sparkSession) {
         List<Tuple3<String, Long, Long>> resultsList = Queries.query1(value);
-        resultsList.forEach(t -> System.out.println(t._1() + ", " + t._2() + ", " + t._3()));
-        Dataset<Tuple3<String, Long, Long>> query1Dataset = sparkSession.createDataset(resultsList, Encoders.tuple(Encoders.STRING(), Encoders.LONG(), Encoders.LONG()));
+        // Convert date format
+        List<Tuple3<String, Long, Long>> converted = new ArrayList<>();
+        SimpleDateFormat from = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS");
+        SimpleDateFormat to = new SimpleDateFormat("dd-MM-yyyy");
+        resultsList.forEach(t ->
+                {
+                    try {
+                        converted.add(new Tuple3<>(to.format(from.parse(t._1())), t._2(), t._3()));
+                    } catch (ParseException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+        );
+        Dataset<Tuple3<String, Long, Long>> query1Dataset = sparkSession.createDataset(converted, Encoders.tuple(Encoders.STRING(), Encoders.LONG(), Encoders.LONG()));
         query1Dataset.repartition(1)
                 .withColumnRenamed("_1", "DD-MM-YYYY")
                 .withColumnRenamed("_2", "vault_id")
