@@ -1,6 +1,6 @@
-package it.uniroma2.sabd.utils;
+package it.uniroma2.sabd.types;
 
-public class OutletParser {
+public class CsvParser {
 
     public static DataRow parseCSV(String csvLine) {
 

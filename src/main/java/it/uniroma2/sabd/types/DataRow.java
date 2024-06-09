@@ -1,4 +1,4 @@
-package it.uniroma2.sabd.utils;
+package it.uniroma2.sabd.types;
 
 import java.io.Serializable;
 

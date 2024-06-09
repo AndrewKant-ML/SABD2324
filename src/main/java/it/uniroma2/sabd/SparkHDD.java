@@ -1,14 +1,12 @@
 package it.uniroma2.sabd;
 
-import it.uniroma2.sabd.utils.OutletParser;
+import it.uniroma2.sabd.types.CsvParser;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.Row;
+import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.SparkSession;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
+import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple5;
 
@@ -19,20 +17,7 @@ public final class SparkHDD {
 
     private static final String FILE_PATH = "hdfs://master:54310/data.csv";
 
-    public static StructType hddDataSchema() {
-        return DataTypes.createStructType(new StructField[]{
-                DataTypes.createStructField("date", DataTypes.StringType, false),
-                DataTypes.createStructField("serial_number", DataTypes.StringType, false),
-                DataTypes.createStructField("model", DataTypes.StringType, false),
-                DataTypes.createStructField("failure", DataTypes.LongType, false),
-                DataTypes.createStructField("vault_id", DataTypes.LongType, false),
-        });
-    }
-
     public static void main(String[] args) {
-
-        String outputPath = "output.csv";
-        if (args.length > 0) outputPath = args[0];
 
         // Open SparkSession with given configuration
         SparkConf conf = new SparkConf()
@@ -40,52 +25,64 @@ public final class SparkHDD {
                 .setAppName("SMART Data Analysis");
         SparkSession sparkSession = SparkSession.builder().config(conf).getOrCreate();
 
-        // Load data from HDFS
-        Dataset<Row> df = sparkSession.read()
-                .format("csv")
-                .option("header", true)
-                .schema(hddDataSchema())
-                .option("dateFormat", "yyyy-MM-ddThh:mm:ss.sssZ")
-                .load(FILE_PATH);
-
-        // Optional instructions to show data
-        // df.show();
-        // df.printSchema();
-
-        // Convert Dataframe to Dataset
-        /*Dataset<DataRow> ds = df.map(
-                new DataRowMapper(),
-                Encoders.bean(DataRow.class)
-        );*/
-
+        // Load data from HDFS and take only the first five columns
         JavaRDD<String> fileContent = sparkSession.read().textFile(FILE_PATH).javaRDD();
-
         JavaRDD<Tuple5<String, String, String, Long, Long>> value = fileContent
-                .map(OutletParser::parseCSV)
+                .map(CsvParser::parseCSV)
                 .filter(Objects::nonNull)
                 .map(x -> new Tuple5<>(x.getTimestamp(), x.getSerialNumber(), x.getModel(), x.getFailure(), x.getVault_id()));
 
-        List<Tuple3<String, Long, Long>> t = Queries.query1(value);
+        // Execute first query
+        executeQuery1(value, sparkSession);
 
-        System.out.println(t.size());
-        t.forEach(x -> System.err.println(x._1() + " " + x._2() + " " + x._3()));
+        // Execute second query - part 1
+        executeQuery2_1(value, sparkSession);
 
+        // Execute second query - part 2
+        executeQuery2_2(value, sparkSession);
+
+        // Close Spark session
         sparkSession.close();
+    }
 
-        //Dataset<Row> fileContent = sparkSession.read().csv(FILE_PATH); //.toDF()
+    private static void executeQuery1(JavaRDD<Tuple5<String, String, String, Long, Long>> value, SparkSession sparkSession) {
+        List<Tuple3<String, Long, Long>> resultsList = Queries.query1(value);
+        resultsList.forEach(t -> System.out.println(t._1() + ", " + t._2() + ", " + t._3()));
+        Dataset<Tuple3<String, Long, Long>> query1Dataset = sparkSession.createDataset(resultsList, Encoders.tuple(Encoders.STRING(), Encoders.LONG(), Encoders.LONG()));
+        query1Dataset.repartition(1)
+                .withColumnRenamed("_1", "DD-MM-YYYY")
+                .withColumnRenamed("_2", "vault_id")
+                .withColumnRenamed("_3", "failures_count")
+                .write()
+                .option("header", true)
+                .format("com.databricks.spark.csv")
+                .save("hdfs://master:54310/out_1.csv");
+    }
 
+    private static void executeQuery2_1(JavaRDD<Tuple5<String, String, String, Long, Long>> value, SparkSession sparkSession) {
+        List<Tuple2<Long, String>> resultsList = Queries.query2First(value);
+        resultsList.forEach(t -> System.out.println(t._1() + ", " + t._2()));
+        Dataset<Tuple2<Long, String>> query1Dataset = sparkSession.createDataset(resultsList, Encoders.tuple(Encoders.LONG(), Encoders.STRING()));
+        query1Dataset.repartition(1)
+                .withColumnRenamed("_1", "model")
+                .withColumnRenamed("_2", "failures_count")
+                .write()
+                .option("header", true)
+                .format("com.databricks.spark.csv")
+                .save("hdfs://master:54310/out_21.csv");
+    }
 
-        /*try (JavaSparkContext sparkContext = new JavaSparkContext(conf)) {
-            sparkContext.setLogLevel("ERROR");
-
-            JavaRDD<String> file = sparkContext
-            JavaRDD<Tuple5<LocalDateTime, String, String, Boolean, Long>> value = file
-                    .map(OutletParser::parseCSV)
-                    .filter(Objects::nonNull)
-                    .map(x -> new Tuple5<>(x.getTimestamp(), x.getSerialNumber(), x.getModel(), x.getFailure(), x.getVault_id()));
-
-            System.out.println("Spark SQL first test - query 1");
-            //SQLQueries.query1(value);
-        }*/
+    private static void executeQuery2_2(JavaRDD<Tuple5<String, String, String, Long, Long>> value, SparkSession sparkSession) {
+        List<Tuple3<Long, Long, String>> resultsList = Queries.query2Second(value);
+        resultsList.forEach(t -> System.out.println(t._1() + ", " + t._2() + ", " + t._3()));
+        Dataset<Tuple3<Long, Long, String>> query1Dataset = sparkSession.createDataset(resultsList, Encoders.tuple(Encoders.LONG(), Encoders.LONG(), Encoders.STRING()));
+        query1Dataset.repartition(1)
+                .withColumnRenamed("_1", "vault_id")
+                .withColumnRenamed("_2", "failures_count")
+                .withColumnRenamed("_3", "list_of_models")
+                .write()
+                .option("header", true)
+                .format("com.databricks.spark.csv")
+                .save("hdfs://master:54310/out_22.csv");
     }
 }
