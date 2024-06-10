@@ -18,13 +18,13 @@ import java.util.Objects;
 
 public final class SparkHDD {
 
-    private static final String FILE_PATH = "hdfs://master:54310/data.csv";
+    private static final String FILE_PATH = "hdfs://master:54310/data/data.csv";
 
     public static void main(String[] args) {
 
         // Open SparkSession with given configuration
         SparkConf conf = new SparkConf()
-                .setMaster("spark://master:7077")
+                .setMaster("spark://localhost:7077")
                 .setAppName("SMART Data Analysis");
         SparkSession sparkSession = SparkSession.builder().config(conf).getOrCreate();
 
@@ -71,7 +71,7 @@ public final class SparkHDD {
                 .write()
                 .option("header", true)
                 .format("com.databricks.spark.csv")
-                .save("hdfs://master:54310/out_1.csv");
+                .save("hdfs://master:54310/out/out_1.csv");
     }
 
     private static void executeQuery2_1(JavaRDD<Tuple5<String, String, String, Long, Long>> value, SparkSession sparkSession) {
@@ -84,7 +84,7 @@ public final class SparkHDD {
                 .write()
                 .option("header", true)
                 .format("com.databricks.spark.csv")
-                .save("hdfs://master:54310/out_21.csv");
+                .save("hdfs://master:54310/out/out_21.csv");
     }
 
     private static void executeQuery2_2(JavaRDD<Tuple5<String, String, String, Long, Long>> value, SparkSession sparkSession) {
@@ -98,6 +98,6 @@ public final class SparkHDD {
                 .write()
                 .option("header", true)
                 .format("com.databricks.spark.csv")
-                .save("hdfs://master:54310/out_22.csv");
+                .save("hdfs://master:54310/out/out_22.csv");
     }
 }

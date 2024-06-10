@@ -1,0 +1,93 @@
+services:
+
+  hdfs-master:
+    image: matnar/hadoop
+    container_name: master
+    hostname: master
+    environment:
+      - HADOOP_USER_NAME = root
+    ports:
+      - "9870:9870"
+      - "54310:54310"
+    networks:
+      - sabd-network
+    tty: true
+    depends_on:
+      - hdfs-slave1
+      - hdfs-slave2
+      - hdfs-slave3
+
+  hdfs-slave1:
+    image: matnar/hadoop
+    container_name: slave1
+    ports:
+      - "9864:9864"
+    networks:
+      - sabd-network
+    tty: true
+
+  hdfs-slave2:
+    image: matnar/hadoop
+    container_name: slave2
+    ports:
+      - "9863:9864"
+    networks:
+      - sabd-network
+    tty: true
+
+  hdfs-slave3:
+    image: matnar/hadoop
+    container_name: slave3
+    ports:
+      - "9862:9864"
+    networks:
+      - sabd-network
+    tty: true
+
+  spark-master:
+    image: bitnami/spark
+    environment:
+      - SPARK_MODE=master
+      - SPARK_LOG_DIR=/tmp/spark-events
+    networks:
+      - sabd-network
+    hostname: spark-master
+    ports:
+      - '8080:8080'
+      - '7077:7077'
+      - '4040:4040'
+    tty: true
+
+  spark-worker:
+    image: bitnami/spark
+    networks:
+      - sabd-network
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_WORKER_CORES=1
+      - SPARK_METRICS_ENABLED=true
+    tty: true
+    depends_on:
+      - spark-master
+
+  spark-history-server:
+    image: rangareddy1988/spark-history-server:${VERSION:-latest}
+    container_name: spark-history-server
+    environment:
+      - SPARK_HISTORY_UI_PORT=18080
+      - SPARK_DAEMON_MEMORY=4g
+      - SPARK_HISTORY_RETAINEDAPPLICATIONS=200
+      - SPARK_HISTORY_UI_MAXAPPLICATIONS=500
+      - SPARK_LOG_DIR=/tmp/spark-events
+    ports:
+      - '18080:18080'
+    networks:
+      - sabd-network
+    volumes:
+      - /tmp/spark/spark-events:/tmp/spark-events
+      - /tmp/spark/spark-history-server-logs:/var/log/spark
+
+networks:
+  sabd-network:
+    driver: bridge
